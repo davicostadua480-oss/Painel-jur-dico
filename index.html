@@ -311,7 +311,37 @@
   </div>
 
   <div id="toastArea" class="toast-area"></div>
-  <script type="module" src="./src/app.js"></script>
+  <script id="pj-boot-failsafe">
+  window.PJ_BOOT_TIMEOUT = setTimeout(function () {
+    var boot = document.getElementById("boot");
+    var auth = document.getElementById("authScreen");
+
+    if (boot && !boot.hidden) {
+      boot.hidden = true;
+
+      if (auth) {
+        auth.hidden = false;
+
+        if (!document.getElementById("bootError")) {
+          var box = document.createElement("div");
+          box.id = "bootError";
+          box.style.cssText = "margin:16px auto;max-width:720px;padding:14px 16px;border:1px solid #f79009;border-radius:14px;background:#fff7ed;color:#7c2d12;font:14px system-ui;line-height:1.5;";
+          box.innerHTML = "<strong>Modo recuperação ativado.</strong><br>O carregamento demorou demais. Se o login não funcionar, confira Firebase Authentication, domínio autorizado e conexão com os scripts do Firebase.";
+          auth.appendChild(box);
+        }
+      }
+    }
+  }, 4500);
+
+  window.addEventListener("error", function (event) {
+    window.PJ_LAST_ERROR = event.message || "Erro desconhecido";
+  });
+
+  window.addEventListener("unhandledrejection", function (event) {
+    window.PJ_LAST_ERROR = event.reason ? String(event.reason.message || event.reason) : "Promise rejeitada";
+  });
+</script>
+<script type="module" src="./src/app.js?v=2"></script>
 </body>
 </html>
 

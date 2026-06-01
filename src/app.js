@@ -193,16 +193,24 @@ function subscribe() {
   }
 }
 
+function finishBoot() {
+  window.PJ_APP_READY = true;
+  if (window.PJ_BOOT_TIMEOUT) clearTimeout(window.PJ_BOOT_TIMEOUT);
+
+  const boot = $("#boot");
+  if (boot) boot.hidden = true;
+}
+
 function showAuth() {
+  finishBoot();
   $("#authScreen").hidden = false;
   $("#appScreen").hidden = true;
-  $("#boot").hidden = true;
 }
 
 function showApp() {
+  finishBoot();
   $("#authScreen").hidden = true;
   $("#appScreen").hidden = false;
-  $("#boot").hidden = true;
 }
 
 function setRoute(route) {
@@ -771,5 +779,27 @@ function init() {
   });
 }
 
-init();
+try {
+  init();
+
+  setTimeout(() => {
+    if (!window.PJ_APP_READY) {
+      console.warn("Firebase/Auth demorou demais. Exibindo tela de login em modo recuperação.");
+      showAuth();
+      toast("Modo recuperação: o Firebase demorou para responder.");
+    }
+  }, 6500);
+} catch (err) {
+  console.error("Falha fatal ao inicializar app:", err);
+
+  const boot = document.getElementById("boot");
+  const auth = document.getElementById("authScreen");
+
+  if (boot) boot.hidden = true;
+  if (auth) auth.hidden = false;
+
+  try {
+    toast("Erro ao iniciar app: " + (err.message || err));
+  } catch (_) {}
+}
 
