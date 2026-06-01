@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Painel Jurídico Studio</title>
+  <meta name="description" content="Portal jurídico com login Firebase e Developer Studio inspirado em CMS/Admin Builder." />
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="boot" class="boot">Inicializando Painel Jurídico Studio...</div>
+
+  <section id="authScreen" class="auth-screen" hidden>
+    <div class="auth-hero">
+      <div class="logo-xl">PJ</div>
+      <p class="overline">Firebase Auth + Firestore</p>
+      <h1>Portal jurídico para usuários. Studio administrativo para desenvolver o sistema.</h1>
+      <p>
+        Usuários entram para controlar processos, prazos, provas e tarefas.
+        O desenvolvedor/admin entra no Studio para configurar módulos, campos, status, tema e estrutura.
+      </p>
+      <div class="hero-grid">
+        <span>Portal do usuário</span>
+        <span>Developer Studio</span>
+        <span>Firestore seguro</span>
+        <span>Sem framework pesado</span>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button id="showLogin" class="active" type="button">Entrar</button>
+        <button id="showRegister" type="button">Criar conta</button>
+      </div>
+
+      <form id="loginForm" class="stack">
+        <h2>Entrar</h2>
+        <label>E-mail <input name="email" type="email" autocomplete="email" required></label>
+        <label>Senha <input name="password" type="password" autocomplete="current-password" required minlength="6"></label>
+        <button class="btn primary" type="submit">Entrar no portal</button>
+        <button id="resetPassword" class="link" type="button">Esqueci a senha</button>
+      </form>
+
+      <form id="registerForm" class="stack" hidden>
+        <h2>Criar conta de usuário</h2>
+        <label>Nome <input name="name" autocomplete="name" required></label>
+        <label>E-mail <input name="email" type="email" autocomplete="email" required></label>
+        <label>Senha <input name="password" type="password" autocomplete="new-password" minlength="6" required></label>
+        <button class="btn primary" type="submit">Criar acesso</button>
+        <p class="hint">
+          Contas criadas aqui são de usuário comum. O admin/studio deve ser promovido manualmente no Firestore em <code>users/{uid}.role = "developer"</code>.
+        </p>
+      </form>
+    </div>
+  </section>
+
+  <section id="appScreen" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span>PJ</span>
+        <div>
+          <strong id="brandName">Painel Jurídico</strong>
+          <small id="roleBadge">usuário</small>
+        </div>
+      </div>
+
+      <nav class="menu">
+        <p>Portal</p>
+        <button class="menu-item active" data-view="dashboard" type="button">Visão geral</button>
+        <button class="menu-item" data-view="cases" type="button">Processos</button>
+        <button class="menu-item" data-view="deadlines" type="button">Prazos</button>
+        <button class="menu-item" data-view="evidence" type="button">Provas</button>
+        <button class="menu-item" data-view="tasks" type="button">Tarefas</button>
+
+        <p class="studio-only" hidden>Developer Studio</p>
+        <button class="menu-item studio-only" data-view="studioHome" type="button" hidden>Studio Home</button>
+        <button class="menu-item studio-only" data-view="studioModules" type="button" hidden>Módulos</button>
+        <button class="menu-item studio-only" data-view="studioFields" type="button" hidden>Campos</button>
+        <button class="menu-item studio-only" data-view="studioTheme" type="button" hidden>Tema</button>
+        <button class="menu-item studio-only" data-view="studioData" type="button" hidden>Data Explorer</button>
+      </nav>
+
+      <div class="side-actions">
+        <button id="seedUserData" class="btn secondary" type="button">Gerar demo usuário</button>
+        <button id="logout" class="btn danger" type="button">Sair</button>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button id="openSidebar" class="icon-btn mobile" type="button">☰</button>
+        <div class="search">
+          <span>⌕</span>
+          <input id="globalSearch" placeholder="Buscar processo, prazo, prova, tarefa, módulo ou campo..." />
+          <kbd>Ctrl K</kbd>
+        </div>
+        <button id="toggleTheme" class="btn secondary" type="button">Tema</button>
+        <button id="newCaseTop" class="btn primary" type="button">+ Processo</button>
+      </header>
+
+      <section class="page active" id="dashboard" data-title="Visão geral">
+        <div class="page-head">
+          <div><p class="overline">Portal do usuário</p><h1>Centro de controle</h1></div>
+          <button id="exportData" class="btn secondary" type="button">Exportar JSON</button>
+        </div>
+
+        <div class="stats">
+          <article><span>Processos</span><strong id="statCases">0</strong></article>
+          <article><span>Prazos urgentes</span><strong id="statDeadlines">0</strong></article>
+          <article><span>Tarefas abertas</span><strong id="statTasks">0</strong></article>
+          <article><span>Provas</span><strong id="statEvidence">0</strong></article>
+        </div>
+
+        <div class="grid two">
+          <article class="panel">
+            <div class="panel-head"><h2>Status dos processos</h2><small>pipeline do usuário</small></div>
+            <div id="statusPipeline" class="pipeline"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h2>Prazos próximos</h2><small>até 15 dias primeiro</small></div>
+            <div id="deadlineDigest" class="list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="page" id="cases" data-title="Processos">
+        <div class="page-head">
+          <div><p class="overline">Cadastro</p><h1>Processos</h1></div>
+          <button data-open="caseModal" class="btn primary" type="button">Novo processo</button>
+        </div>
+        <div class="filters">
+          <select id="caseFilterStatus">
+            <option value="all">Todos</option>
+            <option value="draft">Rascunho</option>
+            <option value="active">Ativo</option>
+            <option value="waiting">Aguardando</option>
+            <option value="urgent">Urgente</option>
+            <option value="closed">Encerrado</option>
+          </select>
+        </div>
+        <div id="caseGrid" class="cards"></div>
+      </section>
+
+      <section class="page" id="deadlines" data-title="Prazos">
+        <div class="page-head">
+          <div><p class="overline">Agenda</p><h1>Prazos</h1></div>
+          <button data-open="deadlineModal" class="btn primary" type="button">Novo prazo</button>
+        </div>
+        <div id="deadlineTable" class="table-wrap"></div>
+      </section>
+
+      <section class="page" id="evidence" data-title="Provas">
+        <div class="page-head">
+          <div><p class="overline">Biblioteca</p><h1>Provas</h1></div>
+          <button data-open="evidenceModal" class="btn primary" type="button">Nova prova</button>
+        </div>
+        <div id="evidenceGrid" class="cards"></div>
+      </section>
+
+      <section class="page" id="tasks" data-title="Tarefas">
+        <div class="page-head">
+          <div><p class="overline">Execução</p><h1>Tarefas</h1></div>
+          <button data-open="taskModal" class="btn primary" type="button">Nova tarefa</button>
+        </div>
+        <div id="taskBoard" class="kanban"></div>
+      </section>
+
+      <section class="page studio" id="studioHome" data-title="Studio Home">
+        <div class="page-head">
+          <div><p class="overline">Developer Studio</p><h1>Construtor do sistema</h1></div>
+          <button id="saveBlueprint" class="btn primary" type="button">Salvar blueprint</button>
+        </div>
+        <div class="studio-alert">
+          <strong>Admin de desenvolvimento, não painel comum.</strong>
+          <span>
+            Esta área é para modelar o produto: módulos, campos, menus, status, tema e estrutura do portal.
+            É um mini CMS Builder próprio, inspirado em padrões de WordPress/Shopify, sem copiar o código deles.
+          </span>
+        </div>
+        <div class="grid three">
+          <article class="panel metric"><span>Módulos configurados</span><strong id="metricModules">0</strong></article>
+          <article class="panel metric"><span>Campos personalizados</span><strong id="metricFields">0</strong></article>
+          <article class="panel metric"><span>Usuários detectados</span><strong id="metricUsers">0</strong></article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><h2>Preview do blueprint</h2><small>estrutura viva do produto</small></div>
+          <pre id="blueprintPreview" class="codebox"></pre>
+        </article>
+      </section>
+
+      <section class="page studio" id="studioModules" data-title="Studio Módulos">
+        <div class="page-head">
+          <div><p class="overline">Developer Studio</p><h1>Módulos do produto</h1></div>
+          <button id="addModule" class="btn primary" type="button">+ Módulo</button>
+        </div>
+        <div id="moduleBuilder" class="builder"></div>
+      </section>
+
+      <section class="page studio" id="studioFields" data-title="Studio Campos">
+        <div class="page-head">
+          <div><p class="overline">Developer Studio</p><h1>Campos personalizados</h1></div>
+          <button id="addField" class="btn primary" type="button">+ Campo</button>
+        </div>
+        <div id="fieldBuilder" class="builder"></div>
+      </section>
+
+      <section class="page studio" id="studioTheme" data-title="Studio Tema">
+        <div class="page-head">
+          <div><p class="overline">Developer Studio</p><h1>Tema e identidade</h1></div>
+          <button id="applyStudioTheme" class="btn primary" type="button">Aplicar tema</button>
+        </div>
+        <div class="grid two">
+          <article class="panel form-panel">
+            <label>Nome do produto <input id="studioProductName" placeholder="Painel Jurídico"></label>
+            <label>Cor primária <input id="studioAccent" type="color" value="#335cff"></label>
+            <label>Texto da tela inicial <textarea id="studioHeroText" rows="5"></textarea></label>
+          </article>
+          <article class="theme-preview" id="themePreview">
+            <span>PJ</span>
+            <h2 id="themePreviewTitle">Painel Jurídico</h2>
+            <p id="themePreviewText">Portal jurídico configurável com Developer Studio.</p>
+            <button class="btn primary" type="button">Ação principal</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="page studio" id="studioData" data-title="Studio Data Explorer">
+        <div class="page-head">
+          <div><p class="overline">Developer Studio</p><h1>Data Explorer</h1></div>
+          <button id="seedBlueprint" class="btn secondary" type="button">Restaurar blueprint demo</button>
+        </div>
+        <div class="grid two">
+          <article class="panel">
+            <div class="panel-head"><h2>Coleções</h2><small>resumo do Firestore</small></div>
+            <div id="collectionExplorer" class="list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h2>Usuários</h2><small>somente developer</small></div>
+            <div id="userExplorer" class="list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <dialog id="caseModal" class="modal">
+    <form id="caseForm" method="dialog" class="modal-card">
+      <header><h2>Processo</h2><button value="cancel" class="icon-btn" type="submit">×</button></header>
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <label>Título <input name="title" required></label>
+        <label>Número <input name="number"></label>
+        <label>Parte contrária <input name="opponent"></label>
+        <label>Órgão/Tribunal <input name="court"></label>
+        <label>Status <select name="status"><option value="draft">Rascunho</option><option value="active">Ativo</option><option value="waiting">Aguardando</option><option value="urgent">Urgente</option><option value="closed">Encerrado</option></select></label>
+        <label>Risco <select name="risk"><option value="low">Baixo</option><option value="medium">Médio</option><option value="high">Alto</option><option value="critical">Crítico</option></select></label>
+        <label class="wide">Resumo estratégico <textarea name="summary" rows="5"></textarea></label>
+      </div>
+      <footer><button class="btn secondary" value="cancel" type="submit">Cancelar</button><button class="btn primary" value="default" type="submit">Salvar</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="deadlineModal" class="modal">
+    <form id="deadlineForm" method="dialog" class="modal-card">
+      <header><h2>Prazo</h2><button value="cancel" class="icon-btn" type="submit">×</button></header>
+      <div class="form-grid">
+        <label>Processo <select name="caseId" required></select></label>
+        <label>Data <input name="dueDate" type="date" required></label>
+        <label class="wide">Descrição <input name="title" required></label>
+        <label>Prioridade <select name="priority"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></label>
+        <label>Status <select name="status"><option value="open">Aberto</option><option value="done">Concluído</option></select></label>
+      </div>
+      <footer><button class="btn secondary" value="cancel" type="submit">Cancelar</button><button class="btn primary" value="default" type="submit">Salvar</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="evidenceModal" class="modal">
+    <form id="evidenceForm" method="dialog" class="modal-card">
+      <header><h2>Prova</h2><button value="cancel" class="icon-btn" type="submit">×</button></header>
+      <div class="form-grid">
+        <label>Processo <select name="caseId" required></select></label>
+        <label>Tipo <select name="type"><option value="document">Documento</option><option value="print">Print</option><option value="audio">Áudio</option><option value="medical">Médico</option><option value="witness">Testemunha</option><option value="other">Outro</option></select></label>
+        <label class="wide">Título <input name="title" required></label>
+        <label class="wide">Link/referência <input name="url"></label>
+        <label class="wide">Observações <textarea name="notes" rows="4"></textarea></label>
+      </div>
+      <footer><button class="btn secondary" value="cancel" type="submit">Cancelar</button><button class="btn primary" value="default" type="submit">Salvar</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="taskModal" class="modal">
+    <form id="taskForm" method="dialog" class="modal-card">
+      <header><h2>Tarefa</h2><button value="cancel" class="icon-btn" type="submit">×</button></header>
+      <div class="form-grid">
+        <label>Processo <select name="caseId"></select></label>
+        <label>Prioridade <select name="priority"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></label>
+        <label class="wide">Tarefa <input name="title" required></label>
+        <label>Status <select name="status"><option value="todo">A fazer</option><option value="doing">Em andamento</option><option value="done">Concluída</option></select></label>
+        <label>Data limite <input name="dueDate" type="date"></label>
+      </div>
+      <footer><button class="btn secondary" value="cancel" type="submit">Cancelar</button><button class="btn primary" value="default" type="submit">Salvar</button></footer>
+    </form>
+  </dialog>
+
+  <div id="commandPalette" class="command-palette" hidden>
+    <div class="command-card">
+      <input id="commandInput" placeholder="Comando rápido: processo, prazo, prova, tarefa, studio..." />
+      <div id="commandResults"></div>
+    </div>
+  </div>
+
+  <div id="toastArea" class="toast-area"></div>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
+

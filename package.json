@@ -1,0 +1,12 @@
+{
+  "name": "painel-juridico-studio-firebase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Portal jurídico com Firebase Auth, Firestore e Developer Studio tipo CMS Builder.",
+  "scripts": {
+    "serve": "npx serve .",
+    "firebase:deploy": "firebase deploy",
+    "firebase:rules": "firebase deploy --only firestore:rules"
+  }
+}
+
