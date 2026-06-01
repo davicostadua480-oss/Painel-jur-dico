@@ -144,21 +144,42 @@ function stopSubscriptions() {
 }
 
 async function ensureProfile(user) {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) return snap.data();
-
-  const profile = {
+  const fallback = {
     uid: user.uid,
     email: user.email,
     name: user.displayName || user.email?.split("@")[0] || "Usuário",
     role: "user",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
+    offline: true
   };
 
-  await setDoc(ref, profile);
-  return { ...profile, createdAt: null, updatedAt: null };
+  try {
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      return { ...fallback, ...snap.data(), offline: false };
+    }
+
+    const profile = {
+      uid: user.uid,
+      email: user.email,
+      name: fallback.name,
+      role: "user",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(ref, profile);
+    return { ...profile, createdAt: null, updatedAt: null, offline: false };
+  } catch (err) {
+    console.warn("Firestore profile indisponível. Entrando em modo local:", err);
+    setTimeout(() => {
+      try {
+        toast("Login aceito. Firestore indisponível/permissão pendente: usando modo local.");
+      } catch (_) {}
+    }, 0);
+    return fallback;
+  }
 }
 
 function scopedQuery(name) {
@@ -183,11 +204,20 @@ function subscribe() {
     state.blueprint = snap.exists() ? { ...defaultBlueprint(), ...snap.data() } : defaultBlueprint();
     applyBlueprintTheme();
     renderStudio();
+  }, err => {
+    console.warn("Blueprint indisponível:", err);
+    state.blueprint = defaultBlueprint();
+    applyBlueprintTheme();
+    renderStudio();
   }));
 
   if (canStudio()) {
     state.unsubs.push(onSnapshot(query(collection(db, "users"), orderBy("createdAt", "desc")), snap => {
       state.users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderStudio();
+    }, err => {
+      console.warn("Usuários indisponíveis:", err);
+      state.users = [];
       renderStudio();
     }));
   }
@@ -211,6 +241,15 @@ function showApp() {
   finishBoot();
   $("#authScreen").hidden = true;
   $("#appScreen").hidden = false;
+}
+
+async function enterWithUser(user) {
+  stopSubscriptions();
+  state.user = user;
+  state.profile = await ensureProfile(user);
+  showApp();
+  subscribe();
+  render();
 }
 
 function setRoute(route) {
@@ -577,18 +616,52 @@ function wireAuth() {
   $("#loginForm").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    try { await signInWithEmailAndPassword(auth, f.get("email"), f.get("password")); }
-    catch (err) { toast("Login falhou: " + err.message); }
+    const btn = e.submitter;
+    const original = btn?.textContent || "Entrar no portal";
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Entrando...";
+    }
+
+    try {
+      const cred = await signInWithEmailAndPassword(auth, f.get("email"), f.get("password"));
+      await enterWithUser(cred.user);
+      toast("Login realizado.");
+    } catch (err) {
+      toast("Login falhou: " + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
   };
 
   $("#registerForm").onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const btn = e.submitter;
+    const original = btn?.textContent || "Criar acesso";
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Criando...";
+    }
+
     try {
       const cred = await createUserWithEmailAndPassword(auth, f.get("email"), f.get("password"));
       await updateProfile(cred.user, { displayName: f.get("name") });
-      toast("Conta criada.");
-    } catch (err) { toast("Cadastro falhou: " + err.message); }
+      await enterWithUser(cred.user);
+      toast("Conta criada e login realizado.");
+    } catch (err) {
+      toast("Cadastro falhou: " + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
   };
 
   $("#resetPassword").onclick = async () => {
@@ -768,13 +841,19 @@ function init() {
     }
 
     try {
-      state.profile = await ensureProfile(user);
-      showApp();
-      subscribe();
-      render();
+      await enterWithUser(user);
     } catch (err) {
-      showAuth();
-      toast("Erro ao preparar perfil: " + err.message);
+      console.error("Erro ao preparar app:", err);
+      state.profile = {
+        uid: user.uid,
+        email: user.email,
+        name: user.displayName || user.email?.split("@")[0] || "Usuário",
+        role: "user",
+        offline: true
+      };
+      showApp();
+      render();
+      toast("Entrou em modo local por erro no Firestore: " + (err.message || err));
     }
   });
 }
