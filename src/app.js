@@ -138,6 +138,18 @@ function filterItems(items, fields) {
   return items.filter(item => fields.some(field => norm(item[field]).includes(q)));
 }
 
+function stampMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.seconds === "number") return value.seconds * 1000;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortByDateDesc(field = "updatedAt") {
+  return (a, b) => stampMs(b[field]) - stampMs(a[field]);
+}
+
 function stopSubscriptions() {
   state.unsubs.forEach(fn => fn && fn());
   state.unsubs = [];
@@ -184,9 +196,13 @@ async function ensureProfile(user) {
 
 function scopedQuery(name) {
   const col = collection(db, name);
+
+  // Evita índice composto no Firestore.
+  // Antes usava where(ownerId) + orderBy(updatedAt), o que exigia criação manual de índices.
+  // Agora filtramos no Firestore e ordenamos localmente no navegador.
   return canStudio()
-    ? query(col, orderBy("updatedAt", "desc"))
-    : query(col, where("ownerId", "==", uid()), orderBy("updatedAt", "desc"));
+    ? query(col)
+    : query(col, where("ownerId", "==", uid()));
 }
 
 function subscribe() {
@@ -194,7 +210,9 @@ function subscribe() {
 
   ["cases", "deadlines", "evidence", "tasks"].forEach(name => {
     const unsub = onSnapshot(scopedQuery(name), snap => {
-      state[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state[name] = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort(sortByDateDesc("updatedAt"));
       render();
     }, err => toast("Erro em " + name + ": " + err.message));
     state.unsubs.push(unsub);
@@ -212,8 +230,10 @@ function subscribe() {
   }));
 
   if (canStudio()) {
-    state.unsubs.push(onSnapshot(query(collection(db, "users"), orderBy("createdAt", "desc")), snap => {
-      state.users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    state.unsubs.push(onSnapshot(query(collection(db, "users")), snap => {
+      state.users = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort(sortByDateDesc("createdAt"));
       renderStudio();
     }, err => {
       console.warn("Usuários indisponíveis:", err);
